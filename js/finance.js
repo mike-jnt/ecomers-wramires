@@ -37,7 +37,7 @@ const Finance = window.Finance = {
     const amountText=prompt("Valor recibido de la transportadora:", String(order.total || 0));
     if(amountText===null) return;
     const amount=Number(String(amountText).replace(/[^0-9.-]/g,""));
-    if(!Number.isFinite(amount) || amount<0) return App.toast("Escribe un valor de recaudo válido.");
+    if(!Number.isFinite(amount) || amount!==Number(order.total)) return App.toast("El recaudo debe coincidir con el total del pedido; los abonos parciales no se cierran.");
     const reference=prompt("Referencia, liquidación o comprobante (opcional):","") ?? "";
     try {
       await FirebaseService.markOrderCollected(id, App.actor(), amount, reference);

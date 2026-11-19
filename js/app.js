@@ -96,17 +96,8 @@
       try {
         let profile = await FirebaseService.getUserProfile(user.uid);
 
-        if (!profile) {
-          try {
-            this.setConnection("Configurando admin…");
-            const bootstrap = await FirebaseService.bootstrapAdminProfile(user);
-            if (bootstrap?.created || bootstrap?.alreadyAdmin) {
-              profile = await FirebaseService.getUserProfile(user.uid);
-            }
-          } catch (bootstrapError) {
-            console.error("Bootstrap admin:", bootstrapError);
-          }
-        }
+        // Provisión administrativa desde el navegador desactivada.
+        // Los usuarios deben tener un perfil previamente autorizado.
 
         if (!profile) {
           await FirebaseService.logout();

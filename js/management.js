@@ -496,6 +496,7 @@ const Management = window.Management = {
     form.elements.quantity.value = o.quantity || 1;
     form.elements.shipping.value = o.shipping || 0;
     form.elements.payment.value = o.payment || "cod";
+    form.elements.payment.disabled = App.state.role !== "admin";
     form.elements.source.value = o.source || "";
     form.elements.notes.value = o.notes || "";
 
@@ -510,7 +511,7 @@ const Management = window.Management = {
 
     document.getElementById("orderEditRestriction").innerHTML = canProduct
       ? `<b>Edición completa habilitada</b><span>Como administrador puedes cambiar producto y cantidad porque el pedido todavía no inició despacho. El sistema recalculará la reserva.</span>`
-      : `<b>Edición limitada</b><span>Producto y cantidad están bloqueados en este estado. Puedes actualizar datos de entrega, pago, envío y observaciones.</span>`;
+      : `<b>Edición limitada</b><span>Producto, cantidad y método de pago están bloqueados para vendedores. Puedes actualizar datos de entrega, envío y observaciones.</span>`;
 
     document.getElementById("orderEditTitle").textContent = `Editar ${o.id}`;
     document.getElementById("orderEditModal").classList.remove("hidden");

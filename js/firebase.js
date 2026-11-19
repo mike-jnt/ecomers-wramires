@@ -313,7 +313,7 @@ window.FirebaseReady = (async () => {
 
 
   const SYSTEM_SCHEMA_VERSION = "16.3";
-  const SYSTEM_APP_VERSION = "V16.3";
+  const SYSTEM_APP_VERSION = "V15.9";
 
   async function detectSystemMigration() {
     const [systemSnap, productSnapshot, orderSnapshot, pricingSnapshot] = await Promise.all([
@@ -494,39 +494,10 @@ window.FirebaseReady = (async () => {
    *   se creen juntos en el mismo batch.
    * - Después de configuracion/seguridad, nadie más puede autoasignarse admin.
    */
-  async function bootstrapAdminProfile(user) {
-    if (!user?.uid) throw new Error("No existe una sesión autenticada.");
-
-    const profileRef = doc(db, "usuariosSistema", user.uid);
-    const securityRef = doc(db, "configuracion", "seguridad");
-
-    const batch = writeBatch(db);
-
-    batch.set(profileRef, {
-      nombre: user.displayName || user.email?.split("@")[0] || "Administrador",
-      email: user.email || "",
-      rol: "admin",
-      activo: true,
-      esAdministradorInicial: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-
-    batch.set(securityRef, {
-      adminUid: user.uid,
-      adminEmail: user.email || "",
-      bootstrapCompletado: true,
-      bootstrapAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-
-    await batch.commit();
-
-    return {
-      created: true,
-      alreadyAdmin: true,
-      role: "admin"
-    };
+  async function bootstrapAdminProfile() {
+    // Protección de seguridad: no crear perfiles administrativos por inicio de sesión.
+    // El primer administrador se configura exclusivamente desde la consola segura.
+    throw new Error("Inicialización de administrador desde el navegador deshabilitada por seguridad.");
   }
 
   /**
@@ -947,36 +918,53 @@ window.FirebaseReady = (async () => {
         neighborhood:cleanText(changes.customer?.neighborhood || "", 160),
         reference:cleanText(changes.customer?.reference || "", 300)
       };
-      const shipping = Math.max(0, Number(changes.shipping || 0));
+      const shipping = Number(changes.shipping ?? order.shipping ?? 0);
+      if (!Number.isFinite(shipping) || shipping < 0) throw new Error("El envío no es un valor válido.");
       const discountApplied = order.discountApplied === true;
       const discountPercent = discountApplied ? Number(order.discountPercent || 8) : 0;
       const nowIso = new Date().toISOString();
+      const nextPayment = actor?.role === "admin"
+        ? (changes.payment === "transfer" ? "transfer" : "cod")
+        : order.payment;
       const basePatch = {
-        customer, shipping, payment:changes.payment === "transfer" ? "transfer" : "cod",
+        customer, shipping,
+        ...(nextPayment !== order.payment ? {
+          payment:nextPayment,
+          collected:nextPayment === "transfer",
+          collectedAt:nextPayment === "transfer" ? serverTimestamp() : null,
+          collectedAmount:null,
+          collectionReference:null
+        } : {}),
         source:cleanText(changes.source || "", 120), notes:cleanText(changes.notes || "", 1200),
         timeline:[...(order.timeline || []), { at:nowIso, label:"Información del pedido editada", user:cleanText(actor.name,160), uid:actor.uid }],
         updatedAt:serverTimestamp()
       };
 
       if (!allowProductChange) {
-        const currentProductRef = doc(db, "productos", order.productId);
-        const currentProductSnap = await transaction.get(currentProductRef);
-        if (!currentProductSnap.exists()) throw new Error("Producto no encontrado.");
-        const currentProduct = currentProductSnap.data();
+        // Mantener precio unitario y versión financiera históricos: editar la
+        // dirección o el envío nunca debe revalorizar un pedido anterior.
+        const unitPrice = Number(order.unitPrice);
+        const qty = Number(order.quantity);
+        if (!Number.isFinite(unitPrice) || !Number.isInteger(qty) || qty < 1) {
+          throw new Error("El pedido tiene importes históricos inválidos.");
+        }
+        const grossTotal = unitPrice * qty + shipping;
+        const discountAmount = discountApplied ? Math.round(grossTotal * discountPercent / 100) : 0;
         transaction.update(orderRef, {
           ...basePatch,
-          unitPrice:Number(currentProduct.precio || order.unitPrice || 0),
-          grossTotal:Number(currentProduct.precio || order.unitPrice || 0) * Number(order.quantity || 1) + shipping,
-          discountAmount:discountApplied ? Math.round((Number(currentProduct.precio || order.unitPrice || 0) * Number(order.quantity || 1) + shipping) * discountPercent / 100) : 0,
-          total:(Number(currentProduct.precio || order.unitPrice || 0) * Number(order.quantity || 1) + shipping) - (discountApplied ? Math.round((Number(currentProduct.precio || order.unitPrice || 0) * Number(order.quantity || 1) + shipping) * discountPercent / 100) : 0),
-          pricingVersionId:order.pricingVersionId || null
+          grossTotal,
+          discountAmount,
+          total:grossTotal - discountAmount
         });
         return { fulfillment:order.fulfillment, status:order.status };
       }
 
       if (!["confirmed", "supplier_pending"].includes(order.status)) throw new Error("Producto y cantidad solo pueden cambiar antes de iniciar despacho.");
       const newProductId = String(changes.productId || order.productId);
-      const newQuantity = Math.max(1, Number(changes.quantity || 1));
+      const newQuantity = Number(changes.quantity || 1);
+      if (!Number.isInteger(newQuantity) || newQuantity < 1 || newQuantity > 10000) {
+        throw new Error("La cantidad debe ser un número entero válido.");
+      }
       const oldProductRef = doc(db, "productos", order.productId);
       const newProductRef = doc(db, "productos", newProductId);
       const oldProductSnap = await transaction.get(oldProductRef);
@@ -1045,15 +1033,18 @@ window.FirebaseReady = (async () => {
       if (["confirmed", "preparing", "packed", "supplier_pending", "supplier_loaded"].includes(order.status)) {
         const productRef = doc(db, "productos", order.productId);
         const productSnap = await transaction.get(productRef);
-        if (productSnap.exists()) {
-          const product = productSnap.data();
-          const qty = Number(order.quantity || 1);
-          if (order.fulfillment === "own") {
-            transaction.update(productRef, { reservado:Math.max(0, Number(product.reservado || 0)-qty), updatedAt:serverTimestamp() });
-          } else {
-            transaction.update(productRef, { reservadoProveedor:Math.max(0, Number(product.reservadoProveedor || 0)-qty), updatedAt:serverTimestamp() });
-          }
-        }
+        if (!productSnap.exists()) throw new Error("Producto del pedido no encontrado; no es seguro liberar la reserva.");
+        const product = productSnap.data();
+        const qty = Number(order.quantity || 1);
+        const reserveField = order.fulfillment === "own" ? "reservado" : "reservadoProveedor";
+        const currentlyReserved = Number(product[reserveField] || 0);
+        if (currentlyReserved < qty) throw new Error("La reserva no coincide con el pedido; se requiere revisión de inventario.");
+        transaction.update(productRef, {
+          [reserveField]:currentlyReserved - qty,
+          lastStockOrderId:orderId,
+          lastStockAction:"cancel",
+          updatedAt:serverTimestamp()
+        });
       }
 
       const safeReason = cleanText(reason || "", 500);
@@ -1238,7 +1229,9 @@ window.FirebaseReady = (async () => {
       const counterSnap = await transaction.get(counterRef);
       if (!counterSnap.exists()) throw new Error("Falta inicializar configuracion/contadores. Ingresa como administrador e inicializa la base.");
       const product = productSnap.data();
-      const quantity = Math.max(1, Number(baseOrder.quantity || 1));
+      const quantity = Number(baseOrder.quantity || 1);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10000) throw new Error("Cantidad inválida.");
+      if (product.activo === false || product.sellerVisible !== true) throw new Error("Este producto no está disponible para venta.");
       const ownReserved = Number(product.reservado || 0);
       const supplierReserved = Number(product.reservadoProveedor || 0);
       const availableOwn = Math.max(0, Number(product.stockPropio || 0)-ownReserved);
@@ -1246,7 +1239,8 @@ window.FirebaseReady = (async () => {
       const supplierAvailable = Math.max(0, Number(product.stockProveedor || 0)-supplierReserved);
       if (fulfillment === "supplier" && supplierAvailable < quantity) throw new Error("No existe disponibilidad suficiente en inventario propio ni proveedor.");
 
-      const shipping = Math.max(0, Number(baseOrder.shipping || 0));
+      const shipping = Number(baseOrder.shipping ?? 0);
+      if (!Number.isFinite(shipping) || shipping < 0) throw new Error("Valor de envío inválido.");
       const unitPrice = Math.max(0, Number(product.precio || 0));
       const discountApplied = baseOrder.discountApplied === true;
       const discountPercent = discountApplied ? 8 : 0;
@@ -1277,9 +1271,10 @@ window.FirebaseReady = (async () => {
         timeline:[{ at:nowIso, label:"Pedido confirmado", user:cleanText(actor.name,160), uid:actor.uid }]
       };
       transaction.set(orderRef, order);
-      transaction.update(counterRef, { pedidoConsecutivo:next, updatedAt:serverTimestamp() });
-      if (fulfillment === "own") transaction.update(productRef, { reservado:ownReserved+quantity, updatedAt:serverTimestamp() });
-      else transaction.update(productRef, { reservadoProveedor:supplierReserved+quantity, updatedAt:serverTimestamp() });
+      transaction.update(counterRef, { pedidoConsecutivo:next, ultimoPedidoId:orderId, updatedAt:serverTimestamp() });
+      const movement = { lastStockOrderId:orderId, lastStockAction:"reserve", updatedAt:serverTimestamp() };
+      if (fulfillment === "own") transaction.update(productRef, { reservado:ownReserved+quantity, ...movement });
+      else transaction.update(productRef, { reservadoProveedor:supplierReserved+quantity, ...movement });
       return { id:orderId, fulfillment, total:order.total };
     });
     await writeAudit("pedido_creado", "pedido", result.id, actor, { fulfillment:result.fulfillment, total:result.total });
@@ -1337,9 +1332,14 @@ window.FirebaseReady = (async () => {
         const product = productSnap.data();
         const quantity = Number(order.quantity || 1);
 
+        if (Number(product.stockPropio || 0) < quantity || Number(product.reservado || 0) < quantity) {
+          throw new Error("No existe inventario reservado suficiente para despachar.");
+        }
         transaction.update(productRef, {
-          stockPropio: Math.max(0, Number(product.stockPropio || 0) - quantity),
-          reservado: Math.max(0, Number(product.reservado || 0) - quantity),
+          stockPropio: Number(product.stockPropio || 0) - quantity,
+          reservado: Number(product.reservado || 0) - quantity,
+          lastStockOrderId:orderId,
+          lastStockAction:"dispatch",
           updatedAt: serverTimestamp()
         });
       } else {
@@ -1366,6 +1366,7 @@ window.FirebaseReady = (async () => {
 
   async function loadSupplierOrder(orderId, supplierOrderId, actor) {
     const safeRef = cleanText(supplierOrderId, 180);
+    if (!safeRef) throw new Error("Ingresa la referencia del pedido del proveedor.");
     await appendTimelineUpdate(orderId, {
       supplierOrderId:safeRef,
       status:"supplier_loaded"
@@ -1379,6 +1380,8 @@ window.FirebaseReady = (async () => {
   }
 
   async function setSupplierGuide(orderId, guide, actor) {
+    const safeGuide = cleanText(guide, 180);
+    if (!safeGuide) throw new Error("Debes registrar una guía de envío.");
     const orderRef = doc(db, "pedidos", orderId);
     await runTransaction(db, async transaction => {
       const orderSnap = await transaction.get(orderRef);
@@ -1393,10 +1396,13 @@ window.FirebaseReady = (async () => {
       const stock = Number(product.stockProveedor || 0);
       const reserved = Number(product.reservadoProveedor || 0);
       if (stock < qty || reserved < qty) throw new Error("El inventario reservado del proveedor no coincide con el pedido.");
-      transaction.update(productRef, { stockProveedor:stock-qty, reservadoProveedor:Math.max(0,reserved-qty), updatedAt:serverTimestamp() });
+      transaction.update(productRef, {
+        stockProveedor:stock-qty, reservadoProveedor:reserved-qty,
+        lastStockOrderId:orderId, lastStockAction:"dispatch", updatedAt:serverTimestamp()
+      });
       transaction.update(orderRef, {
-        guide:cleanText(guide,180), status:"transit",
-        timeline:[...(order.timeline || []), { at:new Date().toISOString(), label:`Proveedor despachó · ${cleanText(guide,180)}`, user:cleanText(actor.name,160), uid:actor.uid }],
+        guide:safeGuide, status:"transit",
+        timeline:[...(order.timeline || []), { at:new Date().toISOString(), label:`Proveedor despachó · ${safeGuide}`, user:cleanText(actor.name,160), uid:actor.uid }],
         updatedAt:serverTimestamp()
       });
     });
@@ -1406,11 +1412,12 @@ window.FirebaseReady = (async () => {
   async function markDelivered(orderId, actor) {
     const orderRef = doc(db, "pedidos", orderId);
 
-    return runTransaction(db, async transaction => {
+    await runTransaction(db, async transaction => {
       const snap = await transaction.get(orderRef);
       if (!snap.exists()) throw new Error("Pedido no encontrado.");
 
       const order = snap.data();
+      if (!["transit", "shipped"].includes(order.status)) throw new Error("El pedido aún no está en tránsito.");
 
       transaction.update(orderRef, {
         status: "delivered",
@@ -1436,7 +1443,11 @@ window.FirebaseReady = (async () => {
       const order = snap.data();
       if (order.status !== "delivered") throw new Error("Solo puedes conciliar pedidos entregados.");
       if (order.payment !== "cod") throw new Error("Este pedido no es contraentrega.");
-      const received = Math.max(0, Number(amount || order.total || 0));
+      if (order.collected === true) throw new Error("El pedido ya está conciliado.");
+      const received = Number(amount);
+      if (!Number.isFinite(received) || received !== Number(order.total) || received < 0) {
+        throw new Error("Para marcarlo como recaudado debes conciliar el total exacto del pedido. Los abonos parciales no se cierran como pagos completos.");
+      }
       transaction.update(orderRef, {
         collected:true, collectedAt:serverTimestamp(), collectedAmount:received, collectionReference:safeReference,
         timeline:[...(order.timeline || []), { at:new Date().toISOString(), label:`Recaudo conciliado · ${received}`, user:cleanText(actor.name,160), uid:actor.uid }],

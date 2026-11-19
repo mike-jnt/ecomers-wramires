@@ -140,7 +140,7 @@ const MigrationCenter = window.MigrationCenter = {
         `${Number(m.canonicalizedProducts || 0)} ID(s) normalizado(s).`
       );
 
-      await this.analyze();
+      // El análisis se ejecuta después de liberar this.running.
 
       // Refrescar listeners para que la UI reciba los IDs/estructura ya migrados.
       App.startDataSync();
@@ -149,6 +149,7 @@ const MigrationCenter = window.MigrationCenter = {
       App.toast(App.firebaseMessage(error));
     } finally {
       this.running = false;
+      await this.analyze();
       progress.classList.add("hidden");
       runBtn.textContent = "Migrar ahora";
       analyzeBtn.disabled = false;

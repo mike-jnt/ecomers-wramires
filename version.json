@@ -1,8 +1,8 @@
 {
   "app": "Nexo Commerce",
-  "version": "V15.7",
-  "build": "15.7.0",
-  "buildDate": "2026-10-22",
+  "version": "V15.9",
+  "build": "15.9.0",
+  "buildDate": "2026-11-19",
   "firebaseProject": "ecomers-etech",
-  "package": "COMPLETA"
+  "package": "COMPLETA_CTRL_M_FIREBASE_CMD"
 }

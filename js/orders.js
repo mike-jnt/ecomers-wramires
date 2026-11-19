@@ -302,29 +302,12 @@ const Orders = window.Orders = {
       if (refreshSummary) this.updateSummary();
     };
 
-    // Primera limpieza inmediatamente después de la confirmación de Firebase.
+    // Limpiar una sola vez. Los temporizadores antiguos borraban la entrada
+    // del siguiente cliente si el vendedor empezaba a escribir de inmediato.
     clearOnce();
-
-    // Mantener la vista de captura abierta.
     if (App.state.activeView !== "new-order") App.go("new-order");
     formElement.scrollIntoView({ behavior:"smooth", block:"start" });
-
-    // Firestore y el navegador pueden producir una actualización justo después
-    // del submit. Repetimos la limpieza al terminar esos ciclos para asegurar
-    // que ningún dato reaparezca en pantalla.
-    requestAnimationFrame(() => clearOnce());
-    [120, 350, 800].forEach(delay => {
-      setTimeout(() => clearOnce(), delay);
-    });
-
-    setTimeout(() => {
-      const phone = document.getElementById("customerPhone");
-      if (phone) {
-        phone.value = "";
-        phone.defaultValue = "";
-        phone.focus({ preventScroll:true });
-      }
-    }, 850);
+    document.getElementById("customerPhone")?.focus({ preventScroll:true });
   },
 
   async waitForOrder(id, timeout = 3000) {

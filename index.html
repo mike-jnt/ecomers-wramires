@@ -1,16 +1,16 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta name="app-version" content="15.7.0">
-  <meta name="build-date" content="2026-10-22">
-  <meta name="nexo-version" content="16.5.0">
+  <meta name="app-version" content="15.9.0">
+  <meta name="build-date" content="2026-11-19">
+  <meta name="nexo-version" content="15.9.0">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#2563eb">
   <title>Nexo Commerce | Operación</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%232563EB%22/><path d=%22M18 18h28v8H29v7h14v8H29v5h17v8H18z%22 fill=%22white%22/></svg>">
-  <link rel="stylesheet" href="css/styles.css?v=15.7.0">
-  <link rel="stylesheet" href="css/print.css?v=15.7.0" media="print">
+  <link rel="stylesheet" href="css/styles.css?v=15.9.0">
+  <link rel="stylesheet" href="css/print.css?v=15.9.0" media="print">
 </head>
 <body>
   <div id="loginView" class="auth-shell">
@@ -25,7 +25,7 @@
 
       <div class="auth-login-grid">
         <div class="auth-copy">
-          <p class="eyebrow">FIREBASE · V15.7</p>
+          <p class="eyebrow">FIREBASE · V15.9</p>
           <h1>Tu operación conectada en tiempo real.</h1>
           <p>El acceso se valida con Firebase Authentication y los permisos se asignan desde el perfil del usuario en Firestore.</p>
 
@@ -495,7 +495,7 @@
               <h1>Usuarios del sistema</h1>
               <p class="muted">Crea usuarios, edita su perfil, desactiva accesos y gestiona recuperación de credenciales.</p>
             </div>
-            <button type="button" class="btn btn-danger" id="openSystemResetBtn">Zona crítica · Reiniciar</button>
+            <button type="button" class="btn btn-danger" id="openSystemResetBtn" title="Solo administrador · atajo Ctrl + M">Zona crítica · Reiniciar (Ctrl + M)</button>
           </div>
 
           <div class="dashboard-grid users-layout">
@@ -1069,12 +1069,12 @@
 
 
   <!-- MODAL REINICIO TOTAL -->
-  <div class="modal-backdrop hidden" id="systemResetModal">
-    <form class="modal modal--danger" id="systemResetForm">
+  <div class="modal-backdrop hidden" id="systemResetModal" role="presentation">
+    <form class="modal modal--danger" id="systemResetForm" role="dialog" aria-modal="true" aria-labelledby="systemResetTitle">
       <div class="modal-head">
         <div>
-          <p class="eyebrow">ZONA CRÍTICA</p>
-          <h2>Reiniciar sistema desde cero</h2>
+          <p class="eyebrow">ZONA CRÍTICA · CTRL + M · SOLO ADMINISTRADOR</p>
+          <h2 id="systemResetTitle">Eliminar historial y reiniciar sistema</h2>
         </div>
         <button type="button" class="icon-btn" data-close-system-reset>✕</button>
       </div>
@@ -1090,13 +1090,14 @@
           <div><span>Productos e inventario</span><b>Eliminar todos</b></div>
           <div><span>Proveedores</span><b>Eliminar todos</b></div>
           <div><span>Gastos y datos financieros</span><b>Eliminar todos</b></div>
+          <div><span>Consecutivos y configuración operativa</span><b>Reiniciar</b></div>
           <div><span>Usuarios del sistema</span><b>Eliminar excepto admin actual</b></div>
           <div><span>Administrador actual</span><b>Conservar acceso</b></div>
         </div>
 
         <div class="info-callout" style="margin-top:14px">
           <b>Firebase Authentication</b>
-          <span>Como esta versión no usa Cloud Functions/Admin SDK, las cuentas antiguas de Authentication no se pueden borrar desde el navegador. Sus perfiles sí se eliminan y dejan de tener acceso. Si vuelves a crear un usuario con el mismo correo y conoces su contraseña anterior, el sistema reutilizará esa cuenta.</span>
+          <span>Esta aplicación no elimina las cuentas de Firebase Authentication desde el navegador; elimina sus perfiles de Firestore, por lo que dejan de acceder al sistema. Se conservan el administrador actual y la seguridad de Firebase. El reinicio dejará un evento mínimo de auditoría. El JSON descargado es un respaldo informativo, no una restauración automática.</span>
         </div>
 
         <label class="field" style="margin-top:16px">
@@ -1219,21 +1220,21 @@
   <!-- TOAST -->
   
   <div id="appVersionBadge" class="app-version-badge" title="Versión publicada">
-    V15.7 · build 15.7.0
+    V15.9 · build 15.9.0
   </div>
 
 <div id="toast" class="toast hidden"></div>
 
   <!-- AREA IMPRESIÓN -->
   <div id="printArea" class="print-area"></div>
-  <script src="js/firebase.js?v=15.7.0"></script>
-  <script src="js/app.js?v=15.7.0"></script>
-  <script src="js/orders.js?v=15.7.0"></script>
-  <script src="js/dispatch.js?v=15.7.0"></script>
-  <script src="js/finance.js?v=15.7.0"></script>
-  <script src="js/management.js?v=15.7.0"></script>
-  <script src="js/pricing.js?v=15.7.0"></script>
-  <script src="js/system-reset.js?v=15.7.0"></script>
-  <script src="js/migration.js?v=15.7.0"></script>
+  <script src="js/firebase.js?v=15.9.0"></script>
+  <script src="js/app.js?v=15.9.0"></script>
+  <script src="js/orders.js?v=15.9.0"></script>
+  <script src="js/dispatch.js?v=15.9.0"></script>
+  <script src="js/finance.js?v=15.9.0"></script>
+  <script src="js/management.js?v=15.9.0"></script>
+  <script src="js/pricing.js?v=15.9.0"></script>
+  <script src="js/system-reset.js?v=15.9.0"></script>
+  <script src="js/migration.js?v=15.9.0"></script>
 </body>
 </html>
